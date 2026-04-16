@@ -1,24 +1,21 @@
-// pes.c — CLI entry point and command dispatch
-//
-// This file is PROVIDED. Do not modify.
-
 #include "pes.h"
 #include "index.h"
 #include "commit.h"
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
-// ─── PROVIDED: Command Implementations ──────────────────────────────────────
+// ─── INIT ─────────────────────────────────────────
 
-// Usage: pes init
 void cmd_init(void) {
     if (mkdir(PES_DIR, 0755) != 0 && access(PES_DIR, F_OK) != 0) {
         fprintf(stderr, "error: failed to create %s\n", PES_DIR);
         return;
     }
+
     mkdir(OBJECTS_DIR, 0755);
     mkdir(".pes/refs", 0755);
     mkdir(REFS_DIR, 0755);
@@ -34,7 +31,8 @@ void cmd_init(void) {
     printf("Initialized empty PES repository in %s/\n", PES_DIR);
 }
 
-// Usage: pes add <file>...
+// ─── ADD ─────────────────────────────────────────
+
 void cmd_add(int argc, char *argv[]) {
     if (argc < 3) {
         fprintf(stderr, "Usage: pes add <file>...\n");
@@ -42,6 +40,8 @@ void cmd_add(int argc, char *argv[]) {
     }
 
     Index index;
+
+    // ✅ IMPORTANT: load index before using
     if (index_load(&index) != 0) {
         fprintf(stderr, "error: failed to load index\n");
         return;
@@ -54,25 +54,30 @@ void cmd_add(int argc, char *argv[]) {
     }
 }
 
-// Usage: pes status
+// ─── STATUS ──────────────────────────────────────
+
 void cmd_status(void) {
     Index index;
+
     if (index_load(&index) != 0) {
         fprintf(stderr, "error: failed to load index\n");
         return;
     }
+
     index_status(&index);
 }
 
-// Usage: pes commit -m <message>
+// ─── COMMIT ──────────────────────────────────────
+
 void cmd_commit(int argc, char *argv[]) {
     if (argc < 4 || strcmp(argv[2], "-m") != 0) {
-        fprintf(stderr, "error: commit requires a message (-m \"message\")\n");
+        fprintf(stderr, "error: commit requires -m \"message\"\n");
         return;
     }
 
     const char *message = argv[3];
     ObjectID commit_id;
+
     if (commit_create(message, &commit_id) != 0) {
         fprintf(stderr, "error: commit failed\n");
         return;
@@ -80,51 +85,53 @@ void cmd_commit(int argc, char *argv[]) {
 
     char hex[HASH_HEX_SIZE + 1];
     hash_to_hex(&commit_id, hex);
+
     printf("Committed: %.12s... %s\n", hex, message);
 }
 
-// Callback for commit_walk used by cmd_log.
+// ─── LOG ─────────────────────────────────────────
+
 static void print_commit(const ObjectID *id, const Commit *commit, void *ctx) {
     (void)ctx;
+
     char hex[HASH_HEX_SIZE + 1];
     hash_to_hex(id, hex);
+
     printf("commit %s\n", hex);
     printf("Author: %s\n", commit->author);
     printf("Date:   %llu\n", (unsigned long long)commit->timestamp);
     printf("\n    %s\n\n", commit->message);
 }
 
-// Usage: pes log
 void cmd_log(void) {
     if (commit_walk(print_commit, NULL) != 0) {
         fprintf(stderr, "No commits yet.\n");
     }
 }
 
-// ─── PROVIDED: Command dispatch ─────────────────────────────────────────────
+// ─── MAIN ────────────────────────────────────────
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
-        fprintf(stderr, "Usage: pes <command> [args]\n");
-        fprintf(stderr, "\nCommands:\n");
-        fprintf(stderr, "  init            Create a new PES repository\n");
-        fprintf(stderr, "  add <file>...   Stage files for commit\n");
-        fprintf(stderr, "  status          Show working directory status\n");
-        fprintf(stderr, "  commit -m <msg> Create a commit from staged files\n");
-        fprintf(stderr, "  log             Show commit history\n");
+        fprintf(stderr, "Usage: pes <command> [args]\n\n");
+        fprintf(stderr, "Commands:\n");
+        fprintf(stderr, "  init\n");
+        fprintf(stderr, "  add <file>...\n");
+        fprintf(stderr, "  status\n");
+        fprintf(stderr, "  commit -m <msg>\n");
+        fprintf(stderr, "  log\n");
         return 1;
     }
 
     const char *cmd = argv[1];
 
-    if      (strcmp(cmd, "init") == 0)     cmd_init();
-    else if (strcmp(cmd, "add") == 0)      cmd_add(argc, argv);
-    else if (strcmp(cmd, "status") == 0)   cmd_status();
-    else if (strcmp(cmd, "commit") == 0)   cmd_commit(argc, argv);
-    else if (strcmp(cmd, "log") == 0)      cmd_log();
+    if      (strcmp(cmd, "init") == 0)   cmd_init();
+    else if (strcmp(cmd, "add") == 0)    cmd_add(argc, argv);
+    else if (strcmp(cmd, "status") == 0) cmd_status();
+    else if (strcmp(cmd, "commit") == 0) cmd_commit(argc, argv);
+    else if (strcmp(cmd, "log") == 0)    cmd_log();
     else {
         fprintf(stderr, "Unknown command: %s\n", cmd);
-        fprintf(stderr, "Run 'pes' with no arguments for usage.\n");
         return 1;
     }
 
